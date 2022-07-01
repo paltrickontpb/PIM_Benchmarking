@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dpu.h>
+#include <time.h>
 
 #include "common.h"
 
@@ -8,6 +9,25 @@
 #define DPU_BINARY "/home/protox/upmem/maxVal/build/dpu"
 #endif
 //-DDPU_BINARY='"/home/protox/upmem/maxVal/build/task"'
+
+typedef double ttype;
+ttype tdiff(struct timespec a, struct timespec b)
+/* Find the time difference. */
+{
+    ttype dt = ((b.tv_sec - a.tv_sec) + (b.tv_nsec - a.tv_nsec) / 1E9);
+    return dt;
+}
+
+struct timespec now()
+/* Return the current time. */
+{
+    struct timespec t;
+    clock_gettime(CLOCK_REALTIME, &t);
+    return t;
+}
+
+struct timespec begin, end, begin_dpu, end_dpu;
+double time_spent_cpu, time_spent_dpu;
  
 int computeMax(uint32_t *data, uint32_t nr_elem){
     uint32_t max = 0;
@@ -61,11 +81,12 @@ int main(){
     }
     DPU_ASSERT(dpu_push_xfer(set, DPU_XFER_TO_DPU, "buffer", 0, sizeof(uint32_t) * NR_ELEM_PER_DPU, DPU_XFER_DEFAULT));
 
+    begin_dpu = now();
     // Run DPUs
     DPU_ASSERT(dpu_launch(set, DPU_SYNCHRONOUS));
 
-    DPU_FOREACH(set, dpu){
-        DPU_ASSERT(dpu_log_read(dpu, stdout));
+    DPU_FOREACH(set, dpu, each_dpu){
+        if(each_dpu==1) DPU_ASSERT(dpu_log_read(dpu, stdout));
     }
 
     // Copy output from dpus
@@ -75,8 +96,14 @@ int main(){
     DPU_ASSERT(dpu_push_xfer(set, DPU_XFER_FROM_DPU, "maxval", 0, sizeof(uint32_t), DPU_XFER_DEFAULT));
 
     // Output verification
-    uint32_t expected_max = computeMax(input_array, BUFFER_SIZE);
     uint32_t dpu_max = computeMax(output_array, DPU_COUNT);
+    end_dpu = now();
+    time_spent_dpu = tdiff(begin_dpu, end_dpu);
+
+    begin = now();
+    uint32_t expected_max = computeMax(input_array, BUFFER_SIZE);
+    end = now();
+    time_spent_cpu = tdiff(begin, end);
 
     printf("Expected: 0x%x\nReceived: 0x%x\n", expected_max, dpu_max);
 
@@ -85,6 +112,9 @@ int main(){
     } else {
         printf("Incorrect Output!\n");
     }
+
+    printf("Total Time Spent by DPU: %.8f sec\n", time_spent_dpu);
+    printf("Total Time Spent by CPU: %.8f sec\n", time_spent_cpu);
 
     // Free the memories
     free_buffers(input_array, output_array);
