@@ -10,6 +10,7 @@
 #endif
 //-DDPU_BINARY='"/home/protox/upmem/maxVal/build/task"'
 
+// Initialising execution time helper functions
 typedef double ttype;
 ttype tdiff(struct timespec a, struct timespec b)
 /* Find the time difference. */
@@ -29,12 +30,14 @@ struct timespec now()
 struct timespec begin, end, begin_dpu, end_dpu;
 double time_spent_cpu, time_spent_dpu;
  
+// Kernel
 int computeMax(uint32_t *data, uint32_t nr_elem){
     uint32_t max = 0;
     for (uint32_t i=0; i<nr_elem; i++) if (max < data[i]) max = data[i];
     return max;
 }
 
+// Other helper functions
 static void init_array(uint32_t *buffer, int bufsize) {
     // Read from from the dataset or set a random buffer
     srand(0);
@@ -67,8 +70,8 @@ int main(){
     // Allocate DPUs and load binary
     DPU_ASSERT(dpu_alloc(DPU_COUNT, NULL, &set));
     DPU_ASSERT(dpu_load(set, DPU_BINARY, NULL));
+    
     DPU_ASSERT(dpu_get_nr_dpus(set, &nr_dpus));
-
     printf("%d DPUs allocated\n", nr_dpus);
 
     // Set input and output buffers in the host
@@ -86,7 +89,7 @@ int main(){
     DPU_ASSERT(dpu_launch(set, DPU_SYNCHRONOUS));
 
     DPU_FOREACH(set, dpu, each_dpu){
-        if(each_dpu==1) DPU_ASSERT(dpu_log_read(dpu, stdout));
+        if(each_dpu==0) DPU_ASSERT(dpu_log_read(dpu, stdout));
     }
 
     // Copy output from dpus
